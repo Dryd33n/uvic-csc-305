@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+
+<style>
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    background: radial-gradient(circle at 20% 20%, #1a202f 0%, #0e1320 60%, #080b12 100%);
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+#gl-canvas {
+    display: block;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+    box-shadow: 0 16px 45px rgba(0, 0, 0, 0.5);
+}
+
+#animToggleButton {
+    margin: 0;
+}
+
+#animToggleButton input[type="button"] {
+    border: 0;
+    border-radius: 999px;
+    padding: 12px 22px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: #0f1525;
+    background: linear-gradient(135deg, #79ffe1 0%, #57c5ff 100%);
+    cursor: pointer;
+    box-shadow: 0 10px 28px rgba(87, 197, 255, 0.35);
+    transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+
+#animToggleButton input[type="button"]:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 30px rgba(87, 197, 255, 0.45);
+    filter: brightness(1.03);
+}
+
+#animToggleButton input[type="button"]:active {
+    transform: translateY(0);
+    box-shadow: 0 8px 18px rgba(87, 197, 255, 0.32);
+}
+</style>
+
+<script id="vertex-shader" type="x-shader/x-vertex">#version 300 es
+
+in vec4 vPosition;
+in vec3 vNormal;
+in vec4 vColor;
+in vec2 vTexCoord;
+
+out vec4 fColor;
+out vec2 fTexCoord;
+out vec3 fObjectPos;
+out vec3 fObjectNormal;
+
+
+uniform vec4 ambientProduct, diffuseProduct, specularProduct;
+uniform mat4 modelViewMatrix;
+uniform mat4 normalMatrix;
+uniform mat4 projectionMatrix;
+uniform vec4 lightPosition;
+uniform float shininess;
+uniform vec3 moonDirection;
+uniform vec4 moonAmbient;
+uniform vec4 moonDiffuse;
+uniform float fireAttenLinear;
+uniform float fireAttenQuadratic;
+
+
+void
+main()
+{
+    // Transform vertex normal into eye coordinates
+    vec3 pos = (modelViewMatrix * vPosition).xyz;
+    //vec3 N = normalize( (modelViewMatrix*vec4(vNormal,0.0)).xyz);
+    vec3 N = normalize( (normalMatrix*vec4(vNormal,0.0)).xyz);
+    
+
+	// Think about what coords light position is in and what that means! There is a good chance you do not want to simply leave lightPosition as is! (same reason you dont leave vPosition as is!)
+    vec3 toFire = lightPosition.xyz - pos;
+    float fireDistance = length(toFire);
+    vec3 L = normalize(toFire) ;
+    vec3 V = normalize(-pos.xyz) ;
+    vec3 R = reflect(-L, N) ;
+    vec3 moonL = normalize(moonDirection);
+
+
+    // Compute terms in the illumination equation
+    float lightDotNormal = max( dot(L, N), 0.0 );
+    vec4 diffuse = vec4(0.0, 0.0, 0.0, 1.0);
+
+
+    float fireAttenuation = 1.0 / (1.0 + fireAttenLinear * fireDistance + fireAttenQuadratic * fireDistance * fireDistance);
+    diffuse = diffuseProduct * lightDotNormal * fireAttenuation;
+	
+	
+    float reflectedDotViewShiny = pow( max(dot(R, V), 0.0), shininess );
+	vec4 specular = vec4(0.0, 0.0, 0.0, 1.0);
+    specular = specularProduct * reflectedDotViewShiny * fireAttenuation;
+
+    float moonDotNormal = max(dot(moonL, N), 0.0);
+    vec4 moonDiffuseTerm = moonDiffuse * moonDotNormal;
+    
+    if( dot(L, N) < 0.0 ) {
+        specular = vec4(0.0, 0.0, 0.0, 1.0);
+    }
+    
+    gl_Position = projectionMatrix * modelViewMatrix * vPosition;
+    
+	fTexCoord = vTexCoord;
+    fObjectPos = vPosition.xyz;
+    fObjectNormal = normalize(vNormal);
+    fColor = ambientProduct * fireAttenuation + diffuse + specular + moonAmbient + moonDiffuseTerm;
+    fColor.a = 1.0;
+}
+</script>
+
+<script id="fragment-shader" type="x-shader/x-fragment">#version 300 es
+
+precision mediump float;
+
+uniform sampler2D texture1;
+uniform sampler2D texture2;
+uniform int blendTextures;
+uniform vec2 uvTile;
+uniform int projectionMode; // 0=uv, 1=planarY, 2=box
+
+in vec4 fColor;
+in vec2 fTexCoord;
+in vec3 fObjectPos;
+in vec3 fObjectNormal;
+
+layout(location=0) out vec4 fragColor ;
+
+void
+main()
+{
+    vec2 baseTexCoord = fTexCoord;
+    if (projectionMode == 1) {
+        // Project top-down along Y by sampling with XZ coordinates.
+        baseTexCoord = fObjectPos.xz;
+    } else if (projectionMode == 2) {
+        // Box projection: choose projection plane from dominant object-space normal axis.
+        vec3 an = abs(normalize(fObjectNormal));
+        if (an.x >= an.y && an.x >= an.z) {
+            baseTexCoord = fObjectPos.yz;
+        } else if (an.y >= an.x && an.y >= an.z) {
+            baseTexCoord = fObjectPos.xz;
+        } else {
+            baseTexCoord = fObjectPos.xy;
+        }
+    }
+    vec2 tiledTexCoord = baseTexCoord * uvTile;
+
+    if( blendTextures == 1)
+    {
+        vec4 alphaTextureColor = texture( texture2, tiledTexCoord );
+        vec4 blendedTextureColor = mix(texture( texture1, tiledTexCoord ), alphaTextureColor, alphaTextureColor.a);
+        fragColor = fColor * blendedTextureColor;
+	}
+	else
+	{
+		fragColor = fColor;
+	}
+
+}
+</script>
+
+<script type="text/javascript" src="Common/webgl-utils.js"></script>
+<script type="text/javascript" src="Common/initShaders.js"></script>
+
+<script type="text/javascript" src="Common/MV.js"></script>
+<script type="text/javascript" src="objects.js"></script>
+<script type="text/javascript" src="utils.js"></script>
+<script type="text/javascript" src="prefabs.js"></script>
+<script type="text/javascript" src="main.js"></script>
+
+
+<body>
+<canvas id="gl-canvas" width="1440" height="771" >
+Oops ... your browser doesn't support the HTML5 canvas element
+</canvas>
+
+<br/>
+<br/>
+
+<div id="animToggleButton">
+    <input id="animToggleButton" type="button" value="Toggle Animation"
+    />
+
+</div><br/>
+
+</body>
+</html>
