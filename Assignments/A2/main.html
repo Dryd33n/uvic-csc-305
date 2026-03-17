@@ -58,70 +58,27 @@ in vec3 vNormal;
 in vec4 vColor;
 in vec2 vTexCoord;
 
-out vec4 fColor;
 out vec2 fTexCoord;
 out vec3 fObjectPos;
 out vec3 fObjectNormal;
+out vec3 fEyePos;
+out vec3 fEyeNormal;
 
 
-uniform vec4 ambientProduct, diffuseProduct, specularProduct;
 uniform mat4 modelViewMatrix;
 uniform mat4 normalMatrix;
 uniform mat4 projectionMatrix;
-uniform vec4 lightPosition;
-uniform float shininess;
-uniform vec3 moonDirection;
-uniform vec4 moonAmbient;
-uniform vec4 moonDiffuse;
-uniform float fireAttenLinear;
-uniform float fireAttenQuadratic;
-
 
 void
 main()
 {
-    // Transform vertex normal into eye coordinates
-    vec3 pos = (modelViewMatrix * vPosition).xyz;
-    //vec3 N = normalize( (modelViewMatrix*vec4(vNormal,0.0)).xyz);
-    vec3 N = normalize( (normalMatrix*vec4(vNormal,0.0)).xyz);
-    
-
-	// Think about what coords light position is in and what that means! There is a good chance you do not want to simply leave lightPosition as is! (same reason you dont leave vPosition as is!)
-    vec3 toFire = lightPosition.xyz - pos;
-    float fireDistance = length(toFire);
-    vec3 L = normalize(toFire) ;
-    vec3 V = normalize(-pos.xyz) ;
-    vec3 R = reflect(-L, N) ;
-    vec3 moonL = normalize(moonDirection);
-
-
-    // Compute terms in the illumination equation
-    float lightDotNormal = max( dot(L, N), 0.0 );
-    vec4 diffuse = vec4(0.0, 0.0, 0.0, 1.0);
-
-
-    float fireAttenuation = 1.0 / (1.0 + fireAttenLinear * fireDistance + fireAttenQuadratic * fireDistance * fireDistance);
-    diffuse = diffuseProduct * lightDotNormal * fireAttenuation;
-	
-	
-    float reflectedDotViewShiny = pow( max(dot(R, V), 0.0), shininess );
-	vec4 specular = vec4(0.0, 0.0, 0.0, 1.0);
-    specular = specularProduct * reflectedDotViewShiny * fireAttenuation;
-
-    float moonDotNormal = max(dot(moonL, N), 0.0);
-    vec4 moonDiffuseTerm = moonDiffuse * moonDotNormal;
-    
-    if( dot(L, N) < 0.0 ) {
-        specular = vec4(0.0, 0.0, 0.0, 1.0);
-    }
-    
     gl_Position = projectionMatrix * modelViewMatrix * vPosition;
-    
+
 	fTexCoord = vTexCoord;
     fObjectPos = vPosition.xyz;
     fObjectNormal = normalize(vNormal);
-    fColor = ambientProduct * fireAttenuation + diffuse + specular + moonAmbient + moonDiffuseTerm;
-    fColor.a = 1.0;
+    fEyePos = (modelViewMatrix * vPosition).xyz;
+    fEyeNormal = normalize((normalMatrix * vec4(vNormal, 0.0)).xyz);
 }
 </script>
 
@@ -133,24 +90,57 @@ uniform sampler2D texture1;
 uniform sampler2D texture2;
 uniform int blendTextures;
 uniform vec2 uvTile;
-uniform int projectionMode; // 0=uv, 1=planarY, 2=box
+uniform int projectionMode;
+uniform vec4 ambientProduct;
+uniform vec4 diffuseProduct;
+uniform vec4 specularProduct;
+uniform vec4 lightPosition;
+uniform float shininess;
+uniform vec3 moonDirection;
+uniform vec4 moonAmbient;
+uniform vec4 moonDiffuse;
+uniform float fireAttenLinear;
+uniform float fireAttenQuadratic;
+uniform float time;
 
-in vec4 fColor;
 in vec2 fTexCoord;
 in vec3 fObjectPos;
 in vec3 fObjectNormal;
+in vec3 fEyePos;
+in vec3 fEyeNormal;
 
 layout(location=0) out vec4 fragColor ;
 
 void
 main()
 {
+    vec3 N = normalize(fEyeNormal);
+    vec3 toFire = lightPosition.xyz - fEyePos;
+    float fireDistance = length(toFire);
+    vec3 L = normalize(toFire);
+    vec3 V = normalize(-fEyePos);
+    vec3 H = normalize(L + V);
+    vec3 moonL = normalize(moonDirection);
+
+    float lightDotNormal = max(dot(L, N), 0.0);
+    float fireAttenuation = 1.0 / (1.0 + fireAttenLinear * fireDistance + fireAttenQuadratic * fireDistance * fireDistance);
+    vec4 diffuse = diffuseProduct * lightDotNormal * fireAttenuation;
+
+    float blinnSpec = pow(max(dot(N, H), 0.0), shininess);
+    vec4 specular = specularProduct * blinnSpec * fireAttenuation;
+    if (lightDotNormal <= 0.0) {
+        specular = vec4(0.0, 0.0, 0.0, 1.0);
+    }
+
+    float moonDotNormal = max(dot(moonL, N), 0.0);
+    vec4 moonDiffuseTerm = moonDiffuse * moonDotNormal;
+    vec4 litColor = ambientProduct * fireAttenuation + diffuse + specular + moonAmbient + moonDiffuseTerm;
+    litColor.a = 1.0;
+
     vec2 baseTexCoord = fTexCoord;
     if (projectionMode == 1) {
-        // Project top-down along Y by sampling with XZ coordinates.
         baseTexCoord = fObjectPos.xz;
     } else if (projectionMode == 2) {
-        // Box projection: choose projection plane from dominant object-space normal axis.
         vec3 an = abs(normalize(fObjectNormal));
         if (an.x >= an.y && an.x >= an.z) {
             baseTexCoord = fObjectPos.yz;
@@ -161,17 +151,32 @@ main()
         }
     }
     vec2 tiledTexCoord = baseTexCoord * uvTile;
+    vec4 surfaceColor = vec4(1.0, 1.0, 1.0, 1.0);
 
     if( blendTextures == 1)
     {
         vec4 alphaTextureColor = texture( texture2, tiledTexCoord );
         vec4 blendedTextureColor = mix(texture( texture1, tiledTexCoord ), alphaTextureColor, alphaTextureColor.a);
-        fragColor = fColor * blendedTextureColor;
+        surfaceColor = blendedTextureColor;
 	}
-	else
-	{
-		fragColor = fColor;
-	}
+
+    vec4 shadedColor = litColor * surfaceColor;
+
+    // Rim term so silhouettes get a glow.
+        float edgeGlow = pow(1.0 - max(dot(N, V), 0.0), 2.8);
+    // Position-based phase so the glow isn't uniform.
+        float wavePhase = fObjectPos.x * 5.5 + fObjectPos.y * 8.5 + fObjectPos.z * 4.0;
+    // Animate that pattern over time to get a sort of flickering / pulsing effect
+        float glowPulse = 0.5 + 0.5 * sin(wavePhase + time * 6.0);
+    // Final glow strength from rim * pulse, scaled so it does not blow out the base shading
+        float glowAmt = edgeGlow * glowPulse * 0.38;
+    // Warm ember color for the glow
+        vec3 glowColor = vec3(1.0, 0.42, 0.08);
+    // Add glow on top of the normal color
+        shadedColor.rgb += glowColor * glowAmt;
+
+    // Output final color (opaque alpha)
+    fragColor = vec4(shadedColor.rgb, 1.0);
 
 }
 </script>

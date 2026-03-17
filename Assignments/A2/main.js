@@ -38,12 +38,12 @@ var RX = 0;
 var RY = 0;
 var RZ = 0;
 
-var MS = []; // The modeling matrix stack
-var TIME = 0.0; // Realtime
+var MS = [];
+var TIME = 0.0;
 var dt = 0.0
 var prevTime = 0.0;
 var resetTimerFlag = true;
-var animFlag = false;
+var animFlag = true;
 var controller;
 var textureTileX = 1.5;
 var textureTileY = 1.5;
@@ -108,14 +108,12 @@ function useGround080Texture() {
         return;
     }
 
-    // Keep texture albedo neutral instead of tinting by the global orange material.
     setColor(vec4(1.0, 1.0, 1.0, 1.0));
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, ground080Texture);
     gl.uniform1i(gl.getUniformLocation(program, "texture1"), 0);
 
-    // Reuse same map for texture2 so Lab7 blend path remains valid.
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, ground080Texture);
     gl.uniform1i(gl.getUniformLocation(program, "texture2"), 1);
@@ -152,14 +150,12 @@ function useWood086Texture() {
         return;
     }
 
-    // Keep texture albedo neutral instead of tinting by the global orange material.
     setColor(vec4(1.0, 1.0, 1.0, 1.0));
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, wood086Texture);
     gl.uniform1i(gl.getUniformLocation(program, "texture1"), 0);
 
-    // Reuse same map for texture2 so Lab7 blend path remains valid.
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, wood086Texture);
     gl.uniform1i(gl.getUniformLocation(program, "texture2"), 1);
@@ -196,7 +192,6 @@ function usePlastic002Texture() {
         return;
     }
 
-    // Keep albedo un-tinted so the plastic map shows as authored.
     setColor(vec4(1.0, 1.0, 1.0, 1.0));
 
     gl.activeTexture(gl.TEXTURE0);
@@ -301,11 +296,6 @@ function useSolidColorMaterial() {
     gl.uniform1i(gl.getUniformLocation(program, "projectionMode"), 0);
 }
 
-// These are used to store the current state of objects.
-// In animation it is often useful to think of an object as having some DOF
-// Then the animation is simply evolving those DOF over time. You could very easily make a higher level object that stores these as Position, Rotation (and also Scale!)
-
-
 window.onload = function init() {
 
     canvas = document.getElementById("gl-canvas");
@@ -318,28 +308,21 @@ window.onload = function init() {
 
     gl.enable(gl.DEPTH_TEST);
 
-    //
-    //  Load shaders and initialize attribute buffers
-    //
     program = initShaders(gl, "vertex-shader", "fragment-shader");
     gl.useProgram(program);
 
 
     setColor(materialDiffuse);
 
-    // Initialize some shapes, note that the curved ones are procedural which allows you to parameterize how nice they look
-    // Those number will correspond to how many sides are used to "estimate" a curved surface. More = smoother
     Cube.init(program);
     Cylinder.init(20, program);
     Cone.init(20, program);
     Sphere.init(36, program);
 
-    // Matrix uniforms
     modelViewMatrixLoc = gl.getUniformLocation(program, "modelViewMatrix");
     normalMatrixLoc = gl.getUniformLocation(program, "normalMatrix");
     projectionMatrixLoc = gl.getUniformLocation(program, "projectionMatrix");
 
-    // Lighting Uniforms
     gl.uniform4fv(gl.getUniformLocation(program,
         "ambientProduct"), flatten(ambientProduct));
     gl.uniform4fv(gl.getUniformLocation(program,
@@ -383,7 +366,6 @@ window.onload = function init() {
             resetTimerFlag = true;
             window.requestAnimFrame(render);
         }
-        //console.log(animFlag);
     };
 
     render(0);
@@ -391,14 +373,6 @@ window.onload = function init() {
 
 function render(timestamp) {
     if (animFlag) {
-        // dt is the change in time or delta time from the last frame to this one
-        // in animation typically we have some property or degree of freedom we want to evolve over time
-        // For example imagine x is the position of a thing.
-        // To get the new position of a thing we do something called integration
-        // the simpelst form of this looks like:
-        // x_new = x + v*dt
-        // That is, the new position equals the current position + the rate of of change of that position (often a velocity or speed) times the change in time
-        // We can do this with angles or positions, the whole x,y,z position, or just one dimension. It is up to us!
         dt = (timestamp - prevTime) / 1000.0;
         prevTime = timestamp;
         TIME += dt;
@@ -408,15 +382,13 @@ function render(timestamp) {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     eye = vec3(0, 0, 10);
-    MS = []; // Initialize modeling matrix stack
+    MS = [];
 
-    // initialize the modeling matrix to identity
     modelMatrix = mat4();
 
-    // set the camera matrix
     let cameraRadius = 15.0;
     let cameraHeight = 10.0;
-    let cameraRotationSpeed = 0.5; // radians per second
+    let cameraRotationSpeed = 0.2;
     let cameraLookAtHeight = 0.0;
 
     eye = vec3(cameraRadius * Math.cos(TIME * cameraRotationSpeed), cameraHeight, cameraRadius * Math.sin(TIME * cameraRotationSpeed));
@@ -433,7 +405,6 @@ function render(timestamp) {
     }
     gl.uniform3fv(gl.getUniformLocation(program, "moonDirection"), flatten(moonDirEye));
 
-    // Keep the point light at the campfire with a strong base and subtle flicker.
     var firePulse = 1.55 + 0.08 * Math.sin(TIME * 4.0);
     var fireGlowRadius = 0.22 + 0.015 * Math.sin(TIME * 4.0);
     fireLightWorld = vec4(
@@ -448,7 +419,6 @@ function render(timestamp) {
     lightSpecular = vec4(1.65 * firePulse, 1.08 * firePulse, 0.50 * firePulse, 1.0);
     lightPosition = transformPointByMat4(viewMatrix, fireLightWorld);
 
-    // set the projection matrix with aspect correction
     var aspect = canvas.width / canvas.height;
     var projLeft = left;
     var projRight = right;
@@ -467,27 +437,23 @@ function render(timestamp) {
 
 
 
-    // set all the matrices
     setAllMatrices();
+    gl.uniform1f(gl.getUniformLocation(program, "time"), TIME);
 
-    // ===== TINY STRANDED ISLAND SCENE =====
-    
-    // ===== SURROUNDING OCEAN (Vast and isolating) =====
     gPush();
 
          useWood086Texture();
         
-        setColor(vec4(0.05, 0.2, 0.6, 1.0)); // Deep ocean blue
+        setColor(vec4(0.05, 0.2, 0.6, 1.0));
         gTranslate(0, -4, 8);
-        gScale(50, 1, 50); // Surround the island with deep water
+        gScale(50, 1, 50);
         drawCube();
     gPop();
 
-    // ===== SMALL ISLAND FLOOR (Tiny sand patch - spherical) =====
     gPush();
         useGround080Texture();
         gTranslate(0, -3, 0);
-        gScale(4, 0.5, 4); // Spherical island instead of flat square
+        gScale(4, 0.5, 4);
         drawSphere();
     gPop();
 
@@ -516,7 +482,6 @@ function render(timestamp) {
 
     useSolidColorMaterial();
 
-    // Wavy grass clumps made from sheared vertical planes.
     gPush();
         gTranslate(-1.5, -2.55, -0.7);
         gScale(0.9, 0.9, 0.9);
@@ -535,7 +500,6 @@ function render(timestamp) {
         drawWavyGrassPatch(12, 0.55, 3.1);
     gPop();
 
-    // Textured drift log near the island edge.
     gPush();
         gTranslate(-1, -2.5 , 1);
         gRotate(30, 0, 1, 0);
@@ -547,8 +511,7 @@ function render(timestamp) {
     useSolidColorMaterial();
 
     gPush();
-        gTranslate(0, -1.5, -10); // Offset into ocean
-        //drawDolphin(dt, -1.5, 12, 0.5);
+        gTranslate(0, -1.5, -10);
     gPop();
 
 

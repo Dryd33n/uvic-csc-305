@@ -1,76 +1,38 @@
-// Matrix and drawing utility functions for WebGL shapes
-
-// Sets the modelview and normal matrix in the shaders
 function setMV() {
     modelViewMatrix = mult(viewMatrix, modelMatrix);
     gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(modelViewMatrix));
     normalMatrix = inverseTranspose(modelViewMatrix);
     gl.uniformMatrix4fv(normalMatrixLoc, false, flatten(normalMatrix));
 }
-
-// Sets the projection, modelview and normal matrix in the shaders
 function setAllMatrices() {
     gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
     setMV();
 }
-
-// Draws a 2x2x2 cube center at the origin
-// Sets the modelview matrix and the normal matrix of the global program
-// Sets the attributes and calls draw arrays
 function drawCube() {
     setMV();
     Cube.draw();
 }
-
-// Draws a sphere centered at the origin of radius 1.0.
-// Sets the modelview matrix and the normal matrix of the global program
-// Sets the attributes and calls draw arrays
 function drawSphere() {
     setMV();
     Sphere.draw();
 }
-
-// Draws a cylinder along z of height 1 centered at the origin
-// and radius 0.5.
-// Sets the modelview matrix and the normal matrix of the global program
-// Sets the attributes and calls draw arrays
 function drawCylinder() {
     setMV();
     Cylinder.draw();
 }
-
-// Draws a cone along z of height 1 centered at the origin
-// and base radius 1.0.
-// Sets the modelview matrix and the normal matrix of the global program
-// Sets the attributes and calls draw arrays
 function drawCone() {
     setMV();
     Cone.draw();
 }
-
-// Post multiples the modelview matrix with a translation matrix
-// and replaces the modeling matrix with the result, x, y, and z are the translation amounts for each axis
 function gTranslate(x, y, z) {
     modelMatrix = mult(modelMatrix, translate([x, y, z]));
 }
-
-// Post multiples the modelview matrix with a rotation matrix
-// and replaces the modeling matrix with the result, theta is the rotation amount, x, y, z are the components of an axis vector (angle, axis rotations!)
 function gRotate(theta, x, y, z) {
     modelMatrix = mult(modelMatrix, rotate(theta, [x, y, z]));
 }
-
-// Post multiples the modelview matrix with a scaling matrix
-// and replaces the modeling matrix with the result, x, y, and z are the scale amounts for each axis
 function gScale(sx, sy, sz) {
     modelMatrix = mult(modelMatrix, scale(sx, sy, sz));
 }
-
-// Post multiplies the model matrix with a general 3D shear matrix.
-// Parameters represent off-diagonal shear terms:
-// x' = x + sxy*y + sxz*z
-// y' = syx*x + y + syz*z
-// z' = szx*x + szy*y + z
 function gShear(sxy, sxz, syx, syz, szx, szy) {
     var shear = mat4();
     shear[0][1] = sxy;
@@ -81,13 +43,9 @@ function gShear(sxy, sxz, syx, syz, szx, szy) {
     shear[2][1] = szy;
     modelMatrix = mult(modelMatrix, shear);
 }
-
-// Pops MS and stores the result as the current modelMatrix
 function gPop() {
     modelMatrix = MS.pop();
 }
-
-// pushes the current modelViewMatrix in the stack MS
 function gPush() {
     MS.push(modelMatrix);
 }
@@ -123,8 +81,6 @@ function randomFloatBetween(min, max, seed) {
     }
     return random * (max - min) + min;
 }
-
-// Setting the colour which is needed during illumination of a surface
 function setColor(c) {
     ambientProduct = mult(lightAmbient, c);
     diffuseProduct = mult(lightDiffuse, c);
@@ -141,3 +97,4 @@ function setColor(c) {
     gl.uniform1f( gl.getUniformLocation(program, 
                                         "shininess"),materialShininess );
 }
+
