@@ -26,3 +26,5 @@ yes, the campfire is a point light which has a glow which flickers to some degre
 
 9. [5 Marks] Creativity: storytelling, scene design, object appearance and other artistic elements.
 the idea of this scene was that somehow someone go trapped on this very small island and they were sort of living there best life despite the fact that they were trapped on here, with a cooler, a nice chair and a fire, what more could you need. The resident of the island is missing which is a mystery left to the viewer
+
+also the movie looks really awful becase sharex lagged the animation super bad, but when not recording it seemed to run fine
